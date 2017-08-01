@@ -49,8 +49,10 @@ from organizations.mixins import OrganizationMixin
 from organizations.mixins import OrganizationUserMixin
 from organizations.mixins import OwnerRequiredMixin
 from organizations.models import Organization
+from organizations.org_model_name_utils import get_org_model_name
 from organizations.utils import create_organization
 
+ORG_MODEL_NAME = get_org_model_name()
 
 class BaseOrganizationList(ListView):
     # TODO change this to query on the specified model
@@ -65,8 +67,8 @@ class BaseOrganizationList(ListView):
 class BaseOrganizationDetail(OrganizationMixin, DetailView):
     def get_context_data(self, **kwargs):
         context = super(BaseOrganizationDetail, self).get_context_data(**kwargs)
-        context['organization_users'] = self.organization.organization_users.all()
-        context['organization'] = self.organization
+        context['%s_users' % ORG_MODEL_NAME] = self.org.org_users.all()
+        context[ORG_MODEL_NAME] = self.org
         return context
 
 
@@ -100,11 +102,10 @@ class BaseOrganizationDelete(OrganizationMixin, DeleteView):
 
 class BaseOrganizationUserList(OrganizationMixin, ListView):
     def get(self, request, *args, **kwargs):
-        self.organization = self.get_organization()
-        self.object_list = self.organization.organization_users.all()
-        context = self.get_context_data(object_list=self.object_list,
-                organization_users=self.object_list,
-                organization=self.organization)
+        self.org = self.get_org()
+        self.object_list = self.org.org_users.all()
+        context = self.get_context_data(object_list=self.object_list,organization_users=self.object_list,
+                                                      organization=self.org)
         return self.render_to_response(context)
 
 
@@ -118,20 +119,19 @@ class BaseOrganizationUserCreate(OrganizationMixin, CreateView):
 
     def get_success_url(self):
         return reverse('organization_user_list',
-                kwargs={'organization_pk': self.object.organization.pk})
+                kwargs={'organization_pk': self.object.org.pk})
 
     def get_form_kwargs(self):
         kwargs = super(BaseOrganizationUserCreate, self).get_form_kwargs()
-        kwargs.update({'organization': self.organization,
-            'request': self.request})
+        kwargs.update({'organization': self.org, 'request': self.request})
         return kwargs
 
     def get(self, request, *args, **kwargs):
-        self.organization = self.get_object()
+        self.org = self.get_object()
         return super(BaseOrganizationUserCreate, self).get(request, *args, **kwargs)
 
     def post(self, request, *args, **kwargs):
-        self.organization = self.get_object()
+        self.org = self.get_object()
         return super(BaseOrganizationUserCreate, self).post(request, *args, **kwargs)
 
 
@@ -140,16 +140,16 @@ class BaseOrganizationUserRemind(OrganizationUserMixin, DetailView):
     # TODO move to invitations backend?
 
     def get_object(self, **kwargs):
-        self.organization_user = super(BaseOrganizationUserRemind, self).get_object()
-        if self.organization_user.user.is_active:
+        self.org_user = super(BaseOrganizationUserRemind, self).get_object()
+        if self.org_user.user.is_active:
             raise HttpResponseBadRequest(_("User is already active"))
-        return self.organization_user
+        return self.org_user
 
     def post(self, request, *args, **kwargs):
         self.object = self.get_object()
         invitation_backend().send_reminder(self.object.user,
                 **{'domain': get_current_site(self.request),
-                    'organization': self.organization, 'sender': request.user})
+                    'organization': self.org, 'sender': request.user})
         return redirect(self.object)
 
 
@@ -160,7 +160,7 @@ class BaseOrganizationUserUpdate(OrganizationUserMixin, UpdateView):
 class BaseOrganizationUserDelete(OrganizationUserMixin, DeleteView):
     def get_success_url(self):
         return reverse('organization_user_list',
-                kwargs={'organization_pk': self.object.organization.pk})
+                kwargs={'organization_pk': self.object.org.pk})
 
 
 class OrganizationSignup(FormView):

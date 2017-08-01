@@ -53,7 +53,7 @@ class ObjectMixinTests(TestCase):
     def test_get_user_object(self):
         view = UserView(organization_pk=self.foo.pk, user_pk=self.dave.pk)
         self.assertEqual(view.get_object(), self.dave)
-        self.assertEqual(view.get_organization(), self.foo)
+        self.assertEqual(view.get_org(), self.foo)
 
     def test_get_model(self):
         """Ensure that the method returns the class object"""

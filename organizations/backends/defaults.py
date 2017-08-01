@@ -45,9 +45,9 @@ from django.utils.translation import ugettext as _
 from organizations.backends.forms import UserRegistrationForm
 from organizations.backends.forms import org_registration_form
 from organizations.backends.tokens import RegistrationTokenGenerator
+from organizations.model_field_utils import model_field_attr
 from organizations.utils import create_organization
 from organizations.utils import default_org_model
-from organizations.utils import model_field_attr
 
 
 class BaseBackend(object):
@@ -228,9 +228,9 @@ class RegistrationBackend(BaseBackend):
                 user.save()
             else:
                 return redirect("organization_add")
-            organization = create_organization(user, form.cleaned_data['name'],
+            org = create_organization(user, form.cleaned_data['name'],
                     form.cleaned_data['slug'], is_active=False)
-            return render(request, self.activation_success_template, {'user': user, 'organization': organization})
+            return render(request, self.activation_success_template, {'user': user, 'organization': org})
         return render(request, self.registration_form_template, {'form': form})
 
     def success_view(self, request):

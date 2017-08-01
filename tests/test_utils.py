@@ -4,9 +4,9 @@ from django.contrib.auth.models import User
 from django.test import TestCase
 from django.test.utils import override_settings
 
+from organizations.model_field_utils import model_field_attr
 from organizations.models import Organization
 from organizations.utils import create_organization
-from organizations.utils import model_field_attr
 from test_abstract.models import CustomOrganization
 from test_accounts.models import Account
 
