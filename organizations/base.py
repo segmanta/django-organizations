@@ -28,6 +28,8 @@ from django.db import models
 from django.db.models.base import ModelBase
 from django.db.models.fields import FieldDoesNotExist
 
+from organizations.org_model_name_utils import get_org_model_name
+
 try:
     import six
 except ImportError:
@@ -38,6 +40,7 @@ from organizations.managers import ActiveOrgManager
 from organizations.managers import OrgManager
 
 USER_MODEL = getattr(settings, 'AUTH_USER_MODEL', 'auth.User')
+ORG_MODEL_NAME = get_org_model_name()
 
 
 class UnicodeMixin(object):
@@ -119,31 +122,35 @@ class OrgMeta(ModelBase):
         Adds the `user` field to the organization user model and the link to
         the specific organization model.
         """
+        org_field_name = ORG_MODEL_NAME
+        org_users_field_name = '%s_users' % ORG_MODEL_NAME
         try:
             cls.module_registry[module]['OrgUserModel']._meta.get_field("user")
         except FieldDoesNotExist:
             cls.module_registry[module]['OrgUserModel'].add_to_class("user",
                 models.ForeignKey(USER_MODEL, related_name="%(app_label)s_%(class)s"))
         try:
-            cls.module_registry[module]['OrgUserModel']._meta.get_field("organization")
+            cls.module_registry[module]['OrgUserModel']._meta.get_field(org_field_name)
         except FieldDoesNotExist:
-            cls.module_registry[module]['OrgUserModel'].add_to_class("organization",
+            cls.module_registry[module]['OrgUserModel'].add_to_class(org_field_name,
                 models.ForeignKey(cls.module_registry[module]['OrgModel'],
-                        related_name="organization_users"))
+                        related_name=org_users_field_name))
 
     def update_org_owner(cls, module):
         """
         Creates the links to the organization and organization user for the owner.
         """
+        org_field_name = ORG_MODEL_NAME
+        org_user_field_name = '%s_user' % ORG_MODEL_NAME
         try:
-            cls.module_registry[module]['OrgOwnerModel']._meta.get_field("organization_user")
+            cls.module_registry[module]['OrgOwnerModel']._meta.get_field(org_user_field_name)
         except FieldDoesNotExist:
-            cls.module_registry[module]['OrgOwnerModel'].add_to_class("organization_user",
+            cls.module_registry[module]['OrgOwnerModel'].add_to_class(org_user_field_name,
                 models.OneToOneField(cls.module_registry[module]['OrgUserModel']))
         try:
-            cls.module_registry[module]['OrgOwnerModel']._meta.get_field("organization")
+            cls.module_registry[module]['OrgOwnerModel']._meta.get_field(org_field_name)
         except FieldDoesNotExist:
-            cls.module_registry[module]['OrgOwnerModel'].add_to_class("organization",
+            cls.module_registry[module]['OrgOwnerModel'].add_to_class(org_field_name,
                 models.OneToOneField(cls.module_registry[module]['OrgModel'],
                         related_name="owner"))
 
@@ -204,12 +211,12 @@ class AbstractBaseOrganizationUser(UnicodeMixin, models.Model):
 
     class Meta:
         abstract = True
-        ordering = ['organization', 'user']
-        unique_together = ('user', 'organization')
+        ordering = [ORG_MODEL_NAME, 'user']
+        unique_together = ('user', ORG_MODEL_NAME)
 
     def __unicode__(self):
         return u"{0} ({1})".format(self.user.get_full_name() if self.user.is_active else
-                self.user.email, self.organization.name)
+                self.user.email, self.org.name)
 
     @property
     def name(self):
@@ -221,6 +228,9 @@ class AbstractBaseOrganizationUser(UnicodeMixin, models.Model):
             return self.user.get_full_name()
         return "{0}".format(self.user)
 
+    @property
+    def org(self):
+        return getattr(self, ORG_MODEL_NAME)
 
 class OrganizationUserBase(six.with_metaclass(OrgMeta, AbstractBaseOrganizationUser)):
     class Meta(AbstractBaseOrganizationUser.Meta):
@@ -236,7 +246,15 @@ class AbstractBaseOrganizationOwner(UnicodeMixin, models.Model):
         abstract = True
 
     def __unicode__(self):
-        return u"{0}: {1}".format(self.organization, self.organization_user)
+        return u"{0}: {1}".format(self.org, self.org_user)
+
+    @property
+    def org(self):
+        return getattr(self, ORG_MODEL_NAME)
+
+    @property
+    def org_user(self):
+        return getattr(self, '%s_user' % ORG_MODEL_NAME)
 
 
 class OrganizationOwnerBase(six.with_metaclass(OrgMeta, AbstractBaseOrganizationOwner)):

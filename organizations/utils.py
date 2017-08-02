@@ -25,6 +25,8 @@
 
 from itertools import chain
 
+from organizations.org_model_name_utils import format_args, get_org_field
+
 
 def default_org_model():
     """Encapsulates importing the concrete model"""
@@ -63,12 +65,13 @@ def create_organization(user, name, slug=None, is_active=None, org_defaults=None
     kwargs.pop('org_user_model', None)  # Discard deprecated argument
 
     org_owner_model = org_model.owner.related.related_model
+    org_users = get_org_field(org_model, 'organization_users')
     try:
         # Django 1.9
-        org_user_model = org_model.organization_users.rel.related_model
+        org_user_model = org_users.rel.related_model
     except AttributeError:
         # Django 1.8
-        org_user_model = org_model.organization_users.related.related_model
+        org_user_model = org_users.related.related_model
 
     if org_defaults is None:
         org_defaults = {}
@@ -84,19 +87,10 @@ def create_organization(user, name, slug=None, is_active=None, org_defaults=None
         org_defaults.update({'is_active': is_active})
 
     org_defaults.update({'name': name})
-    organization = org_model.objects.create(**org_defaults)
+    org = org_model.objects.create(**org_defaults)
 
-    org_user_defaults.update({'organization': organization, 'user': user})
-    new_user = org_user_model.objects.create(**org_user_defaults)
+    org_user_defaults.update({'organization': org, 'user': user})
+    new_user = org_user_model.objects.create(**format_args(**org_user_defaults))
 
-    org_owner_model.objects.create(organization=organization,
-            organization_user=new_user)
-    return organization
-
-
-def model_field_attr(model, model_field, attr):
-    """
-    Returns the specified attribute for the specified field on the model class.
-    """
-    fields = dict([(field.name, field) for field in model._meta.fields])
-    return getattr(fields[model_field], attr)
+    org_owner_model.objects.create(**format_args(organization=org, organization_user=new_user))
+    return org

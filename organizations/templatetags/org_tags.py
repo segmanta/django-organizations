@@ -25,12 +25,17 @@
 
 from django import template
 
+from organizations.org_model_name_utils import get_org_model_name
+
+ORG_MODEL_NAME = get_org_model_name()
+
+
 register = template.Library()
 
 
 @register.inclusion_tag('organizations/organization_users.html', takes_context=True)
 def organization_users(context, org):
-    context.update({'organization_users': org.organization_users.all()})
+    context.update({'%s_users' % ORG_MODEL_NAME: org.org_users.all()})
     return context
 
 
@@ -41,4 +46,4 @@ def is_admin(org, user):
 
 @register.filter
 def is_owner(org, user):
-    return org.owner.organization_user.user == user
+    return org.owner.org_user.user == user

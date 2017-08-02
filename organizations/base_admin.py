@@ -25,9 +25,12 @@
 
 from django.contrib import admin
 
+from organizations.org_model_name_utils import get_org_model_name
+
+ORG_MODEL_NAME = get_org_model_name()
 
 class BaseOwnerInline(admin.StackedInline):
-    raw_id_fields = ('organization_user',)
+    raw_id_fields = ('%s_user' % ORG_MODEL_NAME,)
 
 
 class BaseOrganizationAdmin(admin.ModelAdmin):
@@ -38,9 +41,9 @@ class BaseOrganizationAdmin(admin.ModelAdmin):
 
 
 class BaseOrganizationUserAdmin(admin.ModelAdmin):
-    list_display = ['user', 'organization', 'is_admin']
-    raw_id_fields = ('user', 'organization')
+    list_display = ['user', ORG_MODEL_NAME, 'is_admin']
+    raw_id_fields = ('user', ORG_MODEL_NAME)
 
 
 class BaseOrganizationOwnerAdmin(admin.ModelAdmin):
-    raw_id_fields = ('organization_user', 'organization')
+    raw_id_fields = ('%s_user' % ORG_MODEL_NAME, ORG_MODEL_NAME)

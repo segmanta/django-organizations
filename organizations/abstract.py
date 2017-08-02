@@ -30,6 +30,8 @@ from django.core.urlresolvers import reverse
 from django.db import models
 from django.utils.translation import ugettext_lazy as _
 
+from organizations.org_model_name_utils import get_org_model_name, format_args
+
 try:
     import six
 except ImportError:
@@ -48,6 +50,8 @@ from organizations.signals import owner_changed
 
 USER_MODEL = getattr(settings, 'AUTH_USER_MODEL', 'auth.User')
 ORGS_TIMESTAMPED_MODEL = getattr(settings, 'ORGS_TIMESTAMPED_MODEL', None)
+
+ORG_MODEL_NAME = get_org_model_name()
 
 if ORGS_TIMESTAMPED_MODEL:
     warnings.warn("Configured TimestampModel has been replaced and is now ignored.",
@@ -91,8 +95,8 @@ class AbstractOrganization(six.with_metaclass(OrgMeta, SharedBaseModel, Abstract
 
     class Meta(AbstractBaseOrganization.Meta):
         abstract = True
-        verbose_name = _("organization")
-        verbose_name_plural = _("organizations")
+        verbose_name = _(ORG_MODEL_NAME)
+        verbose_name_plural = _("%ss" % ORG_MODEL_NAME)
 
     def __unicode__(self):
         return self.name
@@ -109,13 +113,10 @@ class AbstractOrganization(six.with_metaclass(OrgMeta, SharedBaseModel, Abstract
         if users_count == 0:
             is_admin = True
         # TODO get specific org user?
-        org_user = self._org_user_model.objects.create(user=user,
-                                                       organization=self,
-                                                       is_admin=is_admin)
+        org_user = self._org_user_model.objects.create(**format_args(user=user, organization=self, is_admin=is_admin))
         if users_count == 0:
             # TODO get specific org user?
-            self._org_owner_model.objects.create(organization=self,
-                                                 organization_user=org_user)
+            self._org_owner_model.objects.create(**format_args(organization=self, organization_user=org_user))
 
         # User added signal
         user_added.send(sender=self, user=user)
@@ -125,8 +126,7 @@ class AbstractOrganization(six.with_metaclass(OrgMeta, SharedBaseModel, Abstract
         """
         Deletes a user from an organization.
         """
-        org_user = self._org_user_model.objects.get(user=user,
-                                                    organization=self)
+        org_user = self._org_user_model.objects.get(**format_args(user=user, organization=self))
         org_user.delete()
 
         # User removed signal
@@ -150,12 +150,11 @@ class AbstractOrganization(six.with_metaclass(OrgMeta, SharedBaseModel, Abstract
             is_admin = True
 
         org_user, created = self._org_user_model.objects\
-                                .get_or_create(organization=self,
-                                               user=user,
-                                               defaults={'is_admin': is_admin})
+                                .get_or_create(**format_args(organization=self,user=user,
+                                                             defaults={'is_admin': is_admin}))
         if users_count == 0:
             self._org_owner_model.objects\
-                .create(organization=self, organization_user=org_user)
+                .create(**format_args(organization=self, organization_user=org_user))
         if created:
             # User added signal
             user_added.send(sender=self, user=user)
@@ -165,8 +164,8 @@ class AbstractOrganization(six.with_metaclass(OrgMeta, SharedBaseModel, Abstract
         """
         Changes ownership of an organization.
         """
-        old_owner = self.owner.organization_user
-        self.owner.organization_user = new_owner
+        old_owner = self.owner.org_user
+        self.owner.org_user = new_owner
         self.owner.save()
 
         # Owner changed signal
@@ -176,14 +175,21 @@ class AbstractOrganization(six.with_metaclass(OrgMeta, SharedBaseModel, Abstract
         """
         Returns True is user is an admin in the organization, otherwise false
         """
-        return True if self.organization_users.filter(user=user, is_admin=True) else False
+        return True if self.org_users.filter(user=user, is_admin=True) else False
 
     def is_owner(self, user):
         """
         Returns True is user is the organization's owner, otherwise false
         """
-        return self.owner.organization_user.user == user
+        return self.owner.org_user.user == user
 
+    @property
+    def org_users(self):
+        return getattr(self, '%s_users' % ORG_MODEL_NAME)
+
+    @classmethod
+    def class_org_users(cls):
+        return getattr(cls, '%s_users' % ORG_MODEL_NAME)
 
 class AbstractOrganizationUser(six.with_metaclass(OrgMeta, SharedBaseModel, AbstractBaseOrganizationUser)):
     """
@@ -193,12 +199,12 @@ class AbstractOrganizationUser(six.with_metaclass(OrgMeta, SharedBaseModel, Abst
 
     class Meta(AbstractBaseOrganizationUser.Meta):
         abstract = True
-        verbose_name = _("organization user")
-        verbose_name_plural = _("organization users")
+        verbose_name = _("%s user" % ORG_MODEL_NAME)
+        verbose_name_plural = _("%s users" % ORG_MODEL_NAME)
 
     def __unicode__(self):
         return u"{0} ({1})".format(self.name if self.user.is_active else
-                self.user.email, self.organization.name)
+                self.user.email, self.org.name)
 
     def delete(self, using=None):
         """
@@ -209,7 +215,7 @@ class AbstractOrganizationUser(six.with_metaclass(OrgMeta, SharedBaseModel, Abst
         """
         from organizations.exceptions import OwnershipRequired
         try:
-            if self.organization.owner.organization_user.id == self.id:
+            if self.org.owner.org_user.id == self.id:
                 raise OwnershipRequired(_("Cannot delete organization owner "
                     "before organization or transferring ownership."))
         # TODO This line presumes that OrgOwner model can't be modified
@@ -221,6 +227,9 @@ class AbstractOrganizationUser(six.with_metaclass(OrgMeta, SharedBaseModel, Abst
         return reverse('organization_user_detail', kwargs={
             'organization_pk': self.organization.pk, 'user_pk': self.user.pk})
 
+    @property
+    def org(self):
+        return getattr(self, ORG_MODEL_NAME)
 
 class AbstractOrganizationOwner(six.with_metaclass(OrgMeta, SharedBaseModel, AbstractBaseOrganizationOwner)):
     """
@@ -230,6 +239,21 @@ class AbstractOrganizationOwner(six.with_metaclass(OrgMeta, SharedBaseModel, Abs
         abstract = True
         verbose_name = _("organization owner")
         verbose_name_plural = _("organization owners")
+
+    def org_user_attr_name(self):
+        return '%s_user' % ORG_MODEL_NAME
+
+    @property
+    def org_user(self):
+        return getattr(self, self.org_user_attr_name())
+
+    @org_user.setter
+    def org_user(self, org_user):
+        setattr(self, self.org_user_attr_name(), org_user)
+
+    @property
+    def org(self):
+        return getattr(self, ORG_MODEL_NAME)
 
     def save(self, *args, **kwargs):
         """
@@ -243,7 +267,7 @@ class AbstractOrganizationOwner(six.with_metaclass(OrgMeta, SharedBaseModel, Abs
 
         """
         from organizations.exceptions import OrganizationMismatch
-        if self.organization_user.organization.pk != self.organization.pk:
+        if self.org_user.org.pk != self.org.pk:
             raise OrganizationMismatch
         else:
             super(AbstractBaseOrganizationOwner, self).save(*args, **kwargs)

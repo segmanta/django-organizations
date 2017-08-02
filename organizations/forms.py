@@ -31,7 +31,10 @@ from django.utils.translation import ugettext_lazy as _
 from organizations.backends import invitation_backend
 from organizations.models import Organization
 from organizations.models import OrganizationUser
+from organizations.org_model_name_utils import get_org_model_name, format_args
 from organizations.utils import create_organization
+
+ORG_MODEL_NAME = get_org_model_name()
 
 
 class OrganizationForm(forms.ModelForm):
@@ -41,23 +44,23 @@ class OrganizationForm(forms.ModelForm):
     def __init__(self, request, *args, **kwargs):
         self.request = request
         super(OrganizationForm, self).__init__(*args, **kwargs)
-        self.fields['owner'].queryset = self.instance.organization_users.filter(
+        self.fields['owner'].queryset = self.instance.org_users.filter(
                 is_admin=True, user__is_active=True)
-        self.fields['owner'].initial = self.instance.owner.organization_user
+        self.fields['owner'].initial = self.instance.owner.org_user
 
     class Meta:
         model = Organization
         exclude = ('users', 'is_active')
 
     def save(self, commit=True):
-        if self.instance.owner.organization_user != self.cleaned_data['owner']:
+        if self.instance.owner.org_user != self.cleaned_data['owner']:
             self.instance.change_owner(self.cleaned_data['owner'])
         return super(OrganizationForm, self).save(commit=commit)
 
     def clean_owner(self):
         owner = self.cleaned_data['owner']
-        if owner != self.instance.owner.organization_user:
-            if self.request.user != self.instance.owner.organization_user.user:
+        if owner != self.instance.owner.org_user:
+            if self.request.user != self.instance.owner.org_user.user:
                 raise forms.ValidationError(_("Only the organization owner can change ownerhip"))
         return owner
 
@@ -67,11 +70,11 @@ class OrganizationUserForm(forms.ModelForm):
 
     class Meta:
         model = OrganizationUser
-        exclude = ('organization', 'user')
+        exclude = (ORG_MODEL_NAME, 'user')
 
     def clean_is_admin(self):
         is_admin = self.cleaned_data['is_admin']
-        if self.instance.organization.owner.organization_user == self.instance and not is_admin:
+        if self.instance.org.owner.org_user == self.instance and not is_admin:
             raise forms.ValidationError(_("The organization owner must be an admin"))
         return is_admin
 
@@ -82,12 +85,12 @@ class OrganizationUserAddForm(forms.ModelForm):
 
     def __init__(self, request, organization, *args, **kwargs):
         self.request = request
-        self.organization = organization
+        self.org = organization
         super(OrganizationUserAddForm, self).__init__(*args, **kwargs)
 
     class Meta:
         model = OrganizationUser
-        exclude = ('user', 'organization')
+        exclude = ('user', ORG_MODEL_NAME)
 
     def save(self, *args, **kwargs):
         """
@@ -104,22 +107,21 @@ class OrganizationUserAddForm(forms.ModelForm):
             user = invitation_backend().invite_by_email(
                     self.cleaned_data['email'],
                     **{'domain': get_current_site(self.request),
-                        'organization': self.organization,
+                        'organization': self.org,
                         'sender': self.request.user})
         # Send a notification email to this user to inform them that they
         # have been added to a new organization.
         invitation_backend().send_notification(user, **{
             'domain': get_current_site(self.request),
-            'organization': self.organization,
+            'organization': self.org,
             'sender': self.request.user,
         })
-        return OrganizationUser.objects.create(user=user,
-                organization=self.organization,
-                is_admin=self.cleaned_data['is_admin'])
+        return OrganizationUser.objects.create(**format_args(user=user, organization=self.org,
+                                                             is_admin=self.cleaned_data['is_admin']))
 
     def clean_email(self):
         email = self.cleaned_data['email']
-        if self.organization.users.filter(email=email):
+        if self.org.users.filter(email=email):
             raise forms.ValidationError(_("There is already an organization "
                                           "member with this email address!"))
         return email
