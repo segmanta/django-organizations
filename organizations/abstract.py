@@ -237,8 +237,8 @@ class AbstractOrganizationOwner(six.with_metaclass(OrgMeta, SharedBaseModel, Abs
     """
     class Meta:
         abstract = True
-        verbose_name = _("organization owner")
-        verbose_name_plural = _("organization owners")
+        verbose_name = _("%s owner" % ORG_MODEL_NAME)
+        verbose_name_plural = _("%s owners" % ORG_MODEL_NAME)
 
     def org_user_attr_name(self):
         return '%s_user' % ORG_MODEL_NAME
